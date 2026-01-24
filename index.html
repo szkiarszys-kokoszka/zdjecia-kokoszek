@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zdjęcia kokoszek i nie tylko</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+<style>
+body { font-family: Arial, sans-serif; background:#f9f9f9; margin:0; padding:20px;}
+h1 { text-align:center; margin-bottom:20px;}
+.panel, .card { background:#fff; padding:15px; border-radius:8px; margin-bottom:20px; }
+.gallery { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:15px; }
+img { width:100%; border-radius:6px; }
+.stars span { cursor:pointer; font-size:20px; color:gold; }
+textarea,input { width:100%; margin-bottom:6px; }
+button { margin-bottom:6px; }
+.warn { color:red; font-weight:bold; }
+.avatar { width:40px; height:40px; border-radius:50%; margin-right:8px; vertical-align:middle; }
+.comment { display:flex; align-items:center; margin-bottom:4px; }
+</style>
+</head>
+<body>
+
+<h1>Zdjęcia kokoszek i nie tylko</h1>
+
+<div class="panel" id="authPanel"></div>
+<div class="panel" id="profilePanel" style="display:none"></div>
+<div class="panel" id="uploadPanel" style="display:none">
+<h3>Dodaj zdjęcie (admin)</h3>
+<input id="title" placeholder="Nazwa zdjęcia">
+<textarea id="desc" placeholder="Opis zdjęcia"></textarea>
+<input type="file" id="file">
+<button onclick="addImage()">Dodaj</button>
+</div>
+
+<div class="gallery" id="gallery"></div>
+
+<script>
+  // =========================
+  // Wklej tutaj swoją konfigurację Firebase (z Web App)
+  // =========================
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_AUTH_DOMAIN",
+    projectId: "TU_PROJECT_ID",
+    storageBucket: "TU_STORAGE_BUCKET",
+    messagingSenderId: "TU_MESSAGING_SENDER_ID",
+    appId: "TU_APP_ID"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  let isAdmin = false;
+
+  // ===== Render panel logowania/profilu =====
+  function renderAuth(user){
+    const authPanel = document.getElementById('authPanel');
+    const profilePanel = document.getElementById('profilePanel');
+    const uploadPanel = document.getElementById('uploadPanel');
+
+    if(user && !user.emailVerified){
+      authPanel.innerHTML = `<div class="warn">⚠ Konto niezweryfikowane. Sprawdź Gmail.</div>
+      <button onclick="sendVerify()">Wyślij mail ponownie</button>
+      <button onclick="logout()">Wyloguj</button>`;
+      profilePanel.style.display='none';
+      uploadPanel.style.display='none';
+      return;
+    }
+
+    if(user){
+      const name = user.displayName || 'Anonim';
+      authPanel.innerHTML = `Zalogowany jako: <b>${name}</b> (${user.email})<br>
+      <button onclick="logout()">Wyloguj</button>`;
+
+      profilePanel.innerHTML = `<h3>Twój profil</h3>
+      <input id="nick" placeholder="Twój nick" value="${user.displayName || ''}">
+      <input type="file" id="avatarFile">
+      <button onclick="saveProfile()">Zapisz profil</button>`;
+      profilePanel.style.display='block';
+
+      if(user.email === 'szkiarszys@gmail.com'){
+        isAdmin = true;
+        uploadPanel.style.display='block';
+      } else {
+        isAdmin = false;
+        uploadPanel.style.display='none';
+      }
+    } else {
+      authPanel.innerHTML = `<h3>Logowanie / Rejestracja</h3>
+      <input id="email" placeholder="Email (Gmail)">
+      <input id="pass" type="password" placeholder="Hasło">
+      <button onclick="login()">Zaloguj</button>
+      <button onclick="register()">Utwórz konto</button>`;
+      profilePanel.style.display='none';
+      uploadPanel.style.display='none';
+    }
+  }
+
+  // ===== AUTH =====
+  function login(){ auth.signInWithEmailAndPassword(email.value, pass.value).catch(e=>alert(e.message)); }
+  function register(){
+    auth.createUserWithEmailAndPassword(email.value, pass.value)
+    .then(cred=>{
+      cred.user.sendEmailVerification();
+      alert('Mail weryfikacyjny wysłany. Sprawdź Gmail.');
+      auth.signOut();
+    })
+    .catch(e=>alert(e.message));
+  }
+  function sendVerify(){ auth.currentUser.sendEmailVerification(); alert('Mail wysłany'); }
+  function logout(){ auth.signOut(); }
+
+  function saveProfile(){
+    const user = auth.currentUser;
+    const nick = document.getElementById('nick').value.trim();
+    const file = document.getElementById('avatarFile').files[0];
+
+    if(nick) user.updateProfile({ displayName: nick });
+
+    if(file){
+      const ref = storage.ref('avatars/' + user.uid);
+      ref.put(file).then(()=> ref.getDownloadURL().then(url=> user.updateProfile({ photoURL: url })));
+    }
+    alert('Profil zapisany');
+  }
+
+  auth.onAuthStateChanged(user => { renderAuth(user); renderGallery(); });
+
+  // ===== FUNKCJE GALERII =====
+  async function addImage(){
+    if(!isAdmin) return alert('Tylko admin może dodawać zdjęcia.');
+    const t = title.value, d = desc.value, f = file.files[0];
+    if(!t || !f) return alert('Uzupełnij dane.');
+
+    const ref = storage.ref('images/' + Date.now());
+    await ref.put(f);
+    const url = await ref.getDownloadURL();
+    await db.collection('images').add({title:t,desc:d,url,ratings:[],comments:[]});
+  }
+
+  function avg(arr){ return arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : 0; }
+  function rate(id,v){ db.collection('images').doc(id).update({ratings: firebase.firestore.FieldValue.arrayUnion(v)}); }
+  function comment(id){
+    const v=document.getElementById('c'+id).value;
+    if(!v) return;
+    const user = auth.currentUser;
+    const name = user?.displayName || 'Anonim';
+    db.collection('images').doc(id).update({comments: firebase.firestore.FieldValue.arrayUnion({name,text:v,photoURL:user?.photoURL||''})});
+  }
+  function del(id){ if(!isAdmin) return; db.collection('images').doc(id).delete(); }
+  function edit(id,f,v){ if(!isAdmin) return; db.collection('images').doc(id).update({[f]:v}); }
+  function delComment(id,i){
+    if(!isAdmin) return;
+    const r = db.collection('images').doc(id);
+    r.get().then(d=>{
+      const c = d.data().comments;
+      c.splice(i,1);
+      r.update({comments:c});
+    });
+  }
+
+  function renderGallery(){
+    db.collection('images').onSnapshot(s=>{
+      gallery.innerHTML='';
+      s.docs.forEach(doc=>{
+        const d = doc.data();
+        const div = document.createElement('div'); div.className='card';
+        const avgStars = avg(d.ratings);
+        div.innerHTML = `<img src="${d.url}">
+        <b>${isAdmin?`<input value="${d.title}" onchange="edit('${doc.id}','title',this.value)">`:d.title}</b>
+        <p>${isAdmin?`<textarea onchange="edit('${doc.id}','desc',this.value)">${d.desc||''}</textarea>`:(d.desc||'')}</p>
+        Średnia: ${avgStars} ⭐ <br>${[0,1,2,3,4,5].map(v=>`<span onclick="rate('${doc.id}',${v})">★</span>`).join('')}
+        <br><input id="c${doc.id}" placeholder="Komentarz"><button onclick="comment('${doc.id}')">Dodaj</button>
+        <ul>${(d.comments||[]).map((c,i)=>`<li class='comment'>${c.photoURL?`<img src='${c.photoURL}' class='avatar'>`:""} ${c.name || 'Anonim'}: ${c.text} ${isAdmin?`<button onclick=\\\"delComment('${doc.id}',${i})\\\">x</button>`:''}</li>`).join('')}</ul>
+        ${isAdmin?`<button onclick="del('${doc.id}')">Usuń zdjęcie</button>`:''}`;
+        gallery.appendChild(div);
+      });
+    });
+  }
+</script>
+
+</body>
+</html>
