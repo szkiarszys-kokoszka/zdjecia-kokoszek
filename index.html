@@ -187,6 +187,27 @@ button { margin-bottom:6px; }
     });
   }
 </script>
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyB86iCAGh0oyhFIbR5gyjxpVrt6_fNsYcQ",
+  authDomain: "zdjecia-kokoszek1-5defc.firebaseapp.com",
+  projectId: "zdjecia-kokoszek1-5defc",
+  storageBucket: "zdjecia-kokoszek1-5defc.firebasestorage.app",
+  messagingSenderId: "688930007627",
+  appId: "1:688930007627:web:8461c76167508d4b3f3bce",
+  measurementId: "G-KLV4H59ZQL"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 </body>
 </html>
+
