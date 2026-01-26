@@ -78,16 +78,27 @@ const ADMIN_EMAIL = "szkiarszys@gmail.com";
 
 /* AUTH */
 window.register = async () => {
-  const email = email.value;
-  const pass = password.value;
-  const res = await createUserWithEmailAndPassword(auth, email, pass);
+  const emailValue = document.getElementById("email").value;
+  const passValue = document.getElementById("password").value;
+
+  if (!emailValue || !passValue) {
+    alert("Wpisz email i hasło");
+    return;
+  }
+
+  const res = await createUserWithEmailAndPassword(auth, emailValue, passValue);
   await sendEmailVerification(res.user);
-  alert("Sprawdź maila i zweryfikuj konto");
+  alert("Sprawdź maila i kliknij link weryfikacyjny");
 };
 
+
 window.login = async () => {
-  await signInWithEmailAndPassword(auth, email.value, password.value);
+  const emailValue = document.getElementById("email").value;
+  const passValue = document.getElementById("password").value;
+
+  await signInWithEmailAndPassword(auth, emailValue, passValue);
 };
+
 
 window.logout = async () => {
   await signOut(auth);
@@ -193,4 +204,5 @@ window.del = async id => {
 </script>
 </body>
 </html>
+
 
