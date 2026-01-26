@@ -1,28 +1,68 @@
-<script type="module">
-alert("JS DZIAŁA");
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Zdjęcia kokoszek i nie tylko</title>
+  <style>
+    body { font-family: Arial; background:#f5f5f5; padding:20px }
+    .box { background:white; padding:15px; margin-bottom:15px; border-radius:8px }
+    button { margin:5px }
+    img { max-width:300px; display:block }
+    .hidden { display:none }
+  </style>
+</head>
+<body>
 
-/* ELEMENTY */
+<h1>🐔 Zdjęcia kokoszek i nie tylko</h1>
+
+<div class="box" id="authBox">
+  <input id="email" placeholder="email"><br>
+  <input id="password" type="password" placeholder="hasło"><br>
+  <button onclick="register()">Rejestracja</button>
+  <button onclick="login()">Logowanie</button>
+  <button onclick="incognito()">Tryb incognito</button>
+</div>
+
+<div class="box hidden" id="userBox">
+  Zalogowany jako: <span id="userEmail"></span>
+  <button onclick="logout()">Wyloguj</button>
+</div>
+
+<div class="box hidden" id="uploadBox">
+  <h3>Dodaj zdjęcie</h3>
+  <input id="photoName" placeholder="Nazwa zdjęcia"><br>
+  <textarea id="photoDesc" placeholder="Opis"></textarea><br>
+  <input type="file" id="photoFile"><br>
+  <button onclick="uploadPhoto()">Dodaj</button>
+</div>
+
+<div id="gallery"></div>
+
+<script type="module">
+// ELEMENTY HTML
 const gallery = document.getElementById("gallery");
 const authBox = document.getElementById("authBox");
 const userBox = document.getElementById("userBox");
 const uploadBox = document.getElementById("uploadBox");
 const userEmail = document.getElementById("userEmail");
 
-/* FIREBASE CONFIG */
+// IMPORTY FIREBASE
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+// KONFIG FIREBASE
 const firebaseConfig = {
-  apiKey: "AIzaSyDskXdRJfexDefGsNWedNQA2VWN8KUKJ9Q",
-  authDomain: "zdjecia-kokoszek2137.firebaseapp.com",
-  projectId: "zdjecia-kokoszek2137",
-  storageBucket: "zdjecia-kokoszek2137.appspot.com",
-  messagingSenderId: "936920168632",
-  appId: "1:936920168632:web:0469dce19d9d4a5ab25c4d"
+  apiKey: "TU_WKLEJ_SWÓJ_API_KEY",
+  authDomain: "TU_WKLEJ_SWÓJ_AUTH_DOMAIN",
+  projectId: "TU_WKLEJ_SWÓJ_PROJECT_ID",
+  storageBucket: "TU_WKLEJ_SWÓJ_STORAGE_BUCKET",
+  messagingSenderId: "TU_WKLEJ_SWÓJ_SENDER_ID",
+  appId: "TU_WKLEJ_SWÓJ_APP_ID"
 };
 
-/* INIT */
+// INICJALIZACJA
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -32,33 +72,39 @@ let currentUser = null;
 let isIncognito = false;
 const ADMIN_EMAIL = "szkiarszys@gmail.com";
 
-/* AUTH */
+// REJESTRACJA
 window.register = async () => {
   const email = document.getElementById("email").value;
   const pass = document.getElementById("password").value;
   if (!email || !pass) return alert("Wpisz email i hasło");
+
   const res = await createUserWithEmailAndPassword(auth, email, pass);
   await sendEmailVerification(res.user);
-  alert("Sprawdź maila i potwierdź konto");
+  alert("Sprawdź maila i kliknij link weryfikacyjny");
 };
 
+// LOGOWANIE
 window.login = async () => {
-  await signInWithEmailAndPassword(
-    auth,
-    document.getElementById("email").value,
-    document.getElementById("password").value
-  );
+  const email = document.getElementById("email").value;
+  const pass = document.getElementById("password").value;
+  await signInWithEmailAndPassword(auth, email, pass);
 };
 
-window.logout = async () => signOut(auth);
+// WYLOGUJ
+window.logout = async () => {
+  await signOut(auth);
+};
 
+// TRYB INCOGNITO
 window.incognito = () => {
   isIncognito = true;
   authBox.classList.add("hidden");
+  userBox.classList.add("hidden");
+  uploadBox.classList.add("hidden");
   loadGallery();
 };
 
-/* STATE */
+// OBSŁUGA STANU ZALOGOWANIA
 onAuthStateChanged(auth, user => {
   currentUser = user;
   if (user) {
@@ -66,21 +112,28 @@ onAuthStateChanged(auth, user => {
     authBox.classList.add("hidden");
     userBox.classList.remove("hidden");
     userEmail.textContent = user.email;
-    if (user.email === ADMIN_EMAIL) uploadBox.classList.remove("hidden");
+    uploadBox.classList.toggle(user.email === ADMIN_EMAIL);
     loadGallery();
+  } else {
+    userBox.classList.add("hidden");
+    uploadBox.classList.add("hidden");
   }
 });
 
-/* UPLOAD */
+// DODAWANIE ZDJĘĆ
 window.uploadPhoto = async () => {
   const file = document.getElementById("photoFile").files[0];
+  if (!file) return alert("Wybierz plik!");
+  const name = document.getElementById("photoName").value || "Bez nazwy";
+  const desc = document.getElementById("photoDesc").value || "";
+
   const r = ref(storage, "photos/" + Date.now());
   await uploadBytes(r, file);
   const url = await getDownloadURL(r);
 
   await addDoc(collection(db, "photos"), {
-    name: photoName.value,
-    desc: photoDesc.value,
+    name,
+    desc,
     url,
     ratings: [],
     comments: []
@@ -88,23 +141,75 @@ window.uploadPhoto = async () => {
   loadGallery();
 };
 
-/* GALLERY */
+// WYSWIETLANIE GALERII
 async function loadGallery() {
   gallery.innerHTML = "";
   const snap = await getDocs(collection(db, "photos"));
   snap.forEach(d => {
     const p = d.data();
     const avg = p.ratings.length ? (p.ratings.reduce((a,b)=>a+b)/p.ratings.length).toFixed(1) : "brak";
-    gallery.innerHTML += `
-      <div class="box">
-        <h3>${p.name}</h3>
-        <p>${p.desc}</p>
-        <img src="${p.url}">
-        ⭐ ${avg}
-      </div>`;
+
+    const div = document.createElement("div");
+    div.className = "box";
+    div.innerHTML = `
+      <h3>${p.name}</h3>
+      <p>${p.desc}</p>
+      <img src="${p.url}">
+      ⭐ Średnia: ${avg}<br>
+      ${!isIncognito && currentUser ? `
+        Oceń:
+        <select onchange="rate('${d.id}', this.value)">
+          <option></option>
+          <option>0</option><option>1</option><option>2</option>
+          <option>3</option><option>4</option><option>5</option>
+        </select><br>
+        <input placeholder="Komentarz" onkeydown="if(event.key==='Enter')comment('${d.id}',this.value)">
+      ` : `<i>Tryb incognito – tylko podgląd</i>`}
+      ${currentUser?.email===ADMIN_EMAIL ? `<button onclick="del('${d.id}')">Usuń</button>`:""}
+    `;
+    gallery.appendChild(div);
   });
 }
+
+// OCENIANIE
+window.rate = async (id, val) => {
+  if (!val) return;
+  const refd = doc(db,"photos",id);
+  const snap = await getDocs(collection(db,"photos"));
+  snap.forEach(async d => {
+    if(d.id===id){
+      const arr=[...d.data().ratings, Number(val)];
+      await updateDoc(refd,{ratings:arr});
+      loadGallery();
+    }
+  });
+};
+
+// KOMENTARZE
+window.comment = async (id, text) => {
+  if (!text) return;
+  const refd = doc(db,"photos",id);
+  const snap = await getDocs(collection(db,"photos"));
+  snap.forEach(async d => {
+    if(d.id===id){
+      const arr=[...(d.data().comments||[]), text];
+      await updateDoc(refd,{comments:arr});
+      loadGallery();
+    }
+  });
+};
+
+// USUWANIE ZDJĘĆ
+window.del = async id => {
+  await deleteDoc(doc(db,"photos",id));
+  loadGallery();
+};
 </script>
+
+</body>
+</html>
+
+
 
 
 
