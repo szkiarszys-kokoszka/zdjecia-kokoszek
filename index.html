@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -16,7 +15,7 @@ img { max-width:300px; display:block; margin-bottom:10px; }
 
 <h1>🐔 Zdjęcia kokoszek i nie tylko</h1>
 
-<!-- STARTOWY WIDOK -->
+<!-- START -->
 <div class="box" id="startBox">
   <button onclick="showView('register')">Rejestracja</button>
   <button onclick="showView('login')">Logowanie</button>
@@ -41,12 +40,13 @@ img { max-width:300px; display:block; margin-bottom:10px; }
   <button onclick="showView('start')">Cofnij</button>
 </div>
 
-<!-- GALERIA -->
+<!-- GALERIA UŻYTKOWNIKA -->
 <div class="box hidden" id="userBox">
   Zalogowany jako: <span id="userEmail"></span>
   <button onclick="logout()">Wyloguj</button>
 </div>
 
+<!-- DODAWANIE ZDJĘĆ (tylko admin) -->
 <div class="box hidden" id="uploadBox">
   <h3>Dodaj zdjęcie</h3>
   <input id="photoName" placeholder="Nazwa zdjęcia"><br>
@@ -55,9 +55,16 @@ img { max-width:300px; display:block; margin-bottom:10px; }
   <button onclick="uploadPhoto()">Dodaj</button>
 </div>
 
+<!-- GALERIA -->
 <div id="gallery"></div>
 
-<script type="module">
+<!-- Firebase CDN -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js"></script>
+
+<script>
 // ELEMENTY
 const startBox = document.getElementById("startBox");
 const registerBox = document.getElementById("registerBox");
@@ -82,36 +89,26 @@ function showView(view) {
   if(view === 'start') startBox.classList.remove("hidden");
   if(view === 'register') registerBox.classList.remove("hidden");
   if(view === 'login') loginBox.classList.remove("hidden");
-  if(view === 'user') {
+  if(view === 'user'){
     userBox.classList.remove("hidden");
     if(currentUser?.email === ADMIN_EMAIL) uploadBox.classList.remove("hidden");
   }
 }
 
-// IMPORT FIREBASE MODUŁ
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-
-// KONFIG
+// KONFIG FIREBASE
 const firebaseConfig = {
-  apiKey: "AIzaSyDskXdRJfexDefGsNWedNQA2VWN8KUKJ9Q",
-  authDomain: "zdjecia-kokoszek2137.firebaseapp.com",
-  projectId: "zdjecia-kokoszek2137",
-  storageBucket: "zdjecia-kokoszek2137.appspot.com",
-  messagingSenderId: "936920168632",
-  appId: "1:936920168632:web:0469dce19d9d4a5ab25c4d",
-  measurementId: "G-WJK0MNHXVL"
+  apiKey: "TU_WKLEJ_SWÓJ_API_KEY",
+  authDomain: "TU_WKLEJ_SWÓJ_AUTH_DOMAIN",
+  projectId: "TU_WKLEJ_SWÓJ_PROJECT_ID",
+  storageBucket: "TU_WKLEJ_SWÓJ_STORAGE_BUCKET",
+  messagingSenderId: "TU_WKLEJ_SWÓJ_SENDER_ID",
+  appId: "TU_WKLEJ_SWÓJ_APP_ID"
 };
 
-// INICJALIZACJA
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const auth = getAuth();
-const db = getFirestore();
-const storage = getStorage();
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
 
 // REJESTRACJA
 async function register(){
@@ -119,8 +116,8 @@ async function register(){
   const pass = document.getElementById("regPass").value;
   if(!email || !pass) return alert("Wpisz email i hasło");
   try{
-    const res = await createUserWithEmailAndPassword(auth,email,pass);
-    await sendEmailVerification(res.user);
+    const res = await auth.createUserWithEmailAndPassword(email,pass);
+    await res.user.sendEmailVerification();
     alert("Sprawdź Gmail i kliknij link weryfikacyjny!");
     showView('start');
   }catch(e){
@@ -134,7 +131,7 @@ async function login(){
   const pass = document.getElementById("loginPass").value;
   if(!email || !pass) return alert("Wpisz email i hasło");
   try{
-    await signInWithEmailAndPassword(auth,email,pass);
+    await auth.signInWithEmailAndPassword(email,pass);
   }catch(e){
     alert("Błąd logowania: "+e.message);
   }
@@ -142,20 +139,20 @@ async function login(){
 
 // WYLOGUJ
 async function logout(){
-  await signOut(auth);
+  await auth.signOut();
   isIncognito = false;
   showView('start');
 }
 
-// INCÓGNITO
+// TRYB INCÓGNITO
 function incognito(){
   isIncognito = true;
   showView('user');
   loadGallery();
 }
 
-// OBSŁUGA STANU
-onAuthStateChanged(auth,user=>{
+// OBSŁUGA STANU ZALOGOWANIA
+auth.onAuthStateChanged(user=>{
   currentUser = user;
   if(user){
     isIncognito = false;
@@ -167,27 +164,28 @@ onAuthStateChanged(auth,user=>{
   }
 });
 
-// DODAJ ZDJĘCIE
+// DODAWANIE ZDJĘĆ
 async function uploadPhoto(){
+  if(!currentUser || currentUser.email !== ADMIN_EMAIL) return;
   const file = document.getElementById("photoFile").files[0];
   if(!file) return alert("Wybierz plik!");
   const name = document.getElementById("photoName").value || "Bez nazwy";
   const desc = document.getElementById("photoDesc").value || "";
 
-  const r = ref(storage,"photos/"+Date.now());
-  await uploadBytes(r,file);
-  const url = await getDownloadURL(r);
+  const r = storage.ref('photos/'+Date.now());
+  await r.put(file);
+  const url = await r.getDownloadURL();
 
-  await addDoc(collection(db,"photos"),{ name, desc, url, ratings:[], comments:[] });
+  await db.collection("photos").add({name, desc, url, ratings:[], comments:[]});
   loadGallery();
 }
 
 // GALERIA
 async function loadGallery(){
-  gallery.innerHTML="";
-  const snap = await getDocs(collection(db,"photos"));
-  snap.forEach(d=>{
-    const p = d.data();
+  gallery.innerHTML = "";
+  const snap = await db.collection("photos").get();
+  snap.forEach(docu=>{
+    const p = docu.data();
     const avg = p.ratings.length ? (p.ratings.reduce((a,b)=>a+b)/p.ratings.length).toFixed(1) : "brak";
     const div = document.createElement("div");
     div.className="box";
@@ -198,15 +196,14 @@ async function loadGallery(){
       ⭐ Średnia: ${avg}<br>
       ${!isIncognito && currentUser ? `
         Oceń:
-        <select onchange="rate('${d.id}',this.value)">
+        <select onchange="rate('${docu.id}',this.value)">
           <option></option>
           <option>0</option><option>1</option><option>2</option>
           <option>3</option><option>4</option><option>5</option>
         </select><br>
-        <input placeholder="Komentarz" onkeydown="if(event.key==='Enter')comment('${d.id}',this.value)">
+        <input placeholder="Komentarz" onkeydown="if(event.key==='Enter')comment('${docu.id}',this.value)">
         <button onclick="loadGallery()">Cofnij</button>
       ` : `<i>Tryb incognito – tylko podgląd</i>`}
-      ${currentUser?.email===ADMIN_EMAIL ? `<button onclick="del('${d.id}')">Usuń</button>` : ""}
     `;
     gallery.appendChild(div);
   });
@@ -215,41 +212,30 @@ async function loadGallery(){
 // OCENY
 async function rate(id,val){
   if(!val) return;
-  const refd = doc(db,"photos",id);
-  const snap = await getDocs(collection(db,"photos"));
-  snap.forEach(async d=>{
-    if(d.id===id){
-      const arr=[...d.data().ratings, Number(val)];
-      await updateDoc(refd,{ratings:arr});
-      loadGallery();
-    }
-  });
+  const refd = db.collection("photos").doc(id);
+  const docSnap = await refd.get();
+  if(docSnap.exists){
+    const arr = [...(docSnap.data().ratings||[]), Number(val)];
+    await refd.update({ratings: arr});
+    loadGallery();
+  }
 }
 
 // KOMENTARZE
 async function comment(id,text){
   if(!text) return;
-  const refd = doc(db,"photos",id);
-  const snap = await getDocs(collection(db,"photos"));
-  snap.forEach(async d=>{
-    if(d.id===id){
-      const arr=[...(d.data().comments||[]), text];
-      await updateDoc(refd,{comments:arr});
-      loadGallery();
-    }
-  });
-}
-
-// USUWANIE
-async function del(id){
-  await deleteDoc(doc(db,"photos",id));
-  loadGallery();
+  const refd = db.collection("photos").doc(id);
+  const docSnap = await refd.get();
+  if(docSnap.exists){
+    const arr = [...(docSnap.data().comments||[]), text];
+    await refd.update({comments: arr});
+    loadGallery();
+  }
 }
 </script>
+
 </body>
 </html>
-
-
 
 
 
