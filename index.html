@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Zdjęcia kokoszek i nie tylko</title>
+  <style>
+    body { font-family: Arial; background:#f5f5f5; padding:20px }
+    .box { background:white; padding:15px; margin-bottom:15px; border-radius:8px }
+    button { margin:5px }
+    img { max-width:300px; display:block }
+    .hidden { display:none }
+  </style>
+</head>
+<body>
+
+<h1>🐔 Zdjęcia kokoszek i nie tylko</h1>
+
+<div class="box" id="authBox">
+  <input id="email" placeholder="email"><br>
+  <input id="password" type="password" placeholder="hasło"><br>
+  <button onclick="register()">Rejestracja</button>
+  <button onclick="login()">Logowanie</button>
+  <button onclick="incognito()">Tryb incognito</button>
+</div>
+
+<div class="box hidden" id="userBox">
+  Zalogowany jako: <span id="userEmail"></span>
+  <button onclick="logout()">Wyloguj</button>
+</div>
+
+<div class="box hidden" id="uploadBox">
+  <h3>Dodaj zdjęcie</h3>
+  <input id="photoName" placeholder="Nazwa zdjęcia"><br>
+  <textarea id="photoDesc" placeholder="Opis"></textarea><br>
+  <input type="file" id="photoFile"><br>
+  <button onclick="uploadPhoto()">Dodaj</button>
+</div>
+
+<div id="gallery"></div>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+/* 🔴 TU WKLEJ SWÓJ firebaseConfig */
+const firebaseConfig = {
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_AUTH_DOMAIN",
+  projectId: "TU_PROJECT_ID",
+  storageBucket: "TU_STORAGE_BUCKET",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth();
+const db = getFirestore();
+const storage = getStorage();
+
+let currentUser = null;
+let isIncognito = false;
+const ADMIN_EMAIL = "szkiarszys@gmail.com";
+
+/* AUTH */
+window.register = async () => {
+  const email = email.value;
+  const pass = password.value;
+  const res = await createUserWithEmailAndPassword(auth, email, pass);
+  await sendEmailVerification(res.user);
+  alert("Sprawdź maila i zweryfikuj konto");
+};
+
+window.login = async () => {
+  await signInWithEmailAndPassword(auth, email.value, password.value);
+};
+
+window.logout = async () => {
+  await signOut(auth);
+};
+
+window.incognito = () => {
+  isIncognito = true;
+  document.getElementById("authBox").classList.add("hidden");
+  loadGallery();
+};
+
+/* STATE */
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  if (user) {
+    isIncognito = false;
+    authBox.classList.add("hidden");
+    userBox.classList.remove("hidden");
+    userEmail.textContent = user.email;
+    if (user.email === ADMIN_EMAIL) uploadBox.classList.remove("hidden");
+    loadGallery();
+  }
+});
+
+/* UPLOAD */
+window.uploadPhoto = async () => {
+  const file = photoFile.files[0];
+  const r = ref(storage, "photos/" + Date.now());
+  await uploadBytes(r, file);
+  const url = await getDownloadURL(r);
+
+  await addDoc(collection(db, "photos"), {
+    name: photoName.value,
+    desc: photoDesc.value,
+    url,
+    ratings: [],
+    comments: []
+  });
+  loadGallery();
+};
+
+/* GALLERY */
+async function loadGallery() {
+  gallery.innerHTML = "";
+  const snap = await getDocs(collection(db, "photos"));
+  snap.forEach(d => {
+    const p = d.data();
+    const avg = p.ratings.length ? (p.ratings.reduce((a,b)=>a+b)/p.ratings.length).toFixed(1) : "brak";
+
+    const div = document.createElement("div");
+    div.className = "box";
+    div.innerHTML = `
+      <h3>${p.name}</h3>
+      <p>${p.desc}</p>
+      <img src="${p.url}">
+      ⭐ Średnia: ${avg}<br>
+      ${!isIncognito && currentUser ? `
+        Oceń:
+        <select onchange="rate('${d.id}', this.value)">
+          <option></option>
+          <option>0</option><option>1</option><option>2</option>
+          <option>3</option><option>4</option><option>5</option>
+        </select><br>
+        <input placeholder="Komentarz" onkeydown="if(event.key==='Enter')comment('${d.id}',this.value)">
+      ` : `<i>Tryb incognito – tylko podgląd</i>`}
+      ${currentUser?.email===ADMIN_EMAIL ? `<button onclick="del('${d.id}')">Usuń</button>`:""}
+    `;
+    gallery.appendChild(div);
+  });
+}
+
+/* ACTIONS */
+window.rate = async (id, val) => {
+  if (!val) return;
+  const refd = doc(db,"photos",id);
+  const snap = await getDocs(collection(db,"photos"));
+  snap.forEach(async d=>{
+    if(d.id===id){
+      const arr=[...d.data().ratings,val*1];
+      await updateDoc(refd,{ratings:arr});
+      loadGallery();
+    }
+  });
+};
+
+window.comment = async (id, text) => {
+  const refd = doc(db,"photos",id);
+  const snap = await getDocs(collection(db,"photos"));
+  snap.forEach(async d=>{
+    if(d.id===id){
+      const arr=[...(d.data().comments||[]), text];
+      await updateDoc(refd,{comments:arr});
+      loadGallery();
+    }
+  });
+};
+
+window.del = async id => {
+  await deleteDoc(doc(db,"photos",id));
+  loadGallery();
+};
+
+</script>
+</body>
+</html>
