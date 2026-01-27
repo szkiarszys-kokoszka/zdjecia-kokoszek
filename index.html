@@ -2,235 +2,160 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>Zdjęcia kokoszek i nie tylko</title>
+<title>Zdjęcia kokoszek</title>
 <style>
-body { font-family: Arial; background:#f5f5f5; padding:20px; }
-.box { background:white; padding:15px; margin-bottom:15px; border-radius:8px; }
-button { margin:5px; }
-img { max-width:300px; display:block; margin-bottom:10px; }
-.hidden { display:none; }
+body { font-family: Arial; background:#f5f5f5; padding:20px }
+.box { background:#fff; padding:15px; margin-bottom:15px; border-radius:8px }
+.hidden { display:none }
+button { margin:5px }
+img { max-width:300px; display:block }
 </style>
 </head>
 <body>
 
-<h1>🐔 Zdjęcia kokoszek i nie tylko</h1>
+<h1>🐔 Zdjęcia kokoszek</h1>
 
-<!-- START -->
 <div class="box" id="startBox">
-  <button onclick="showView('register')">Rejestracja</button>
-  <button onclick="showView('login')">Logowanie</button>
+  <button onclick="show('register')">Rejestracja</button>
+  <button onclick="show('login')">Logowanie</button>
   <button onclick="incognito()">Tryb incognito</button>
 </div>
 
-<!-- REJESTRACJA -->
 <div class="box hidden" id="registerBox">
   <h3>Rejestracja</h3>
   <input id="regEmail" placeholder="Email"><br>
   <input id="regPass" type="password" placeholder="Hasło"><br>
-  <button onclick="register()">Zarejestruj się</button>
-  <button onclick="showView('start')">Cofnij</button>
+  <button onclick="register()">Zarejestruj</button>
+  <button onclick="show('start')">Cofnij</button>
 </div>
 
-<!-- LOGOWANIE -->
 <div class="box hidden" id="loginBox">
   <h3>Logowanie</h3>
-  <input id="loginEmail" placeholder="Email"><br>
-  <input id="loginPass" type="password" placeholder="Hasło"><br>
-  <button onclick="login()">Zaloguj się</button>
-  <button onclick="showView('start')">Cofnij</button>
+  <input id="logEmail" placeholder="Email"><br>
+  <input id="logPass" type="password" placeholder="Hasło"><br>
+  <button onclick="login()">Zaloguj</button>
+  <button onclick="show('start')">Cofnij</button>
 </div>
 
-<!-- GALERIA UŻYTKOWNIKA -->
 <div class="box hidden" id="userBox">
   Zalogowany jako: <span id="userEmail"></span>
   <button onclick="logout()">Wyloguj</button>
 </div>
 
-<!-- DODAWANIE ZDJĘĆ (tylko admin) -->
 <div class="box hidden" id="uploadBox">
-  <h3>Dodaj zdjęcie</h3>
-  <input id="photoName" placeholder="Nazwa zdjęcia"><br>
+  <h3>Dodaj zdjęcie (ADMIN)</h3>
+  <input id="photoName" placeholder="Nazwa"><br>
   <textarea id="photoDesc" placeholder="Opis"></textarea><br>
   <input type="file" id="photoFile"><br>
   <button onclick="uploadPhoto()">Dodaj</button>
 </div>
 
-<!-- GALERIA -->
 <div id="gallery"></div>
 
-<!-- Firebase CDN -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js"></script>
+<!-- FIREBASE v8 -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
 
 <script>
-// ELEMENTY
-const startBox = document.getElementById("startBox");
-const registerBox = document.getElementById("registerBox");
-const loginBox = document.getElementById("loginBox");
-const userBox = document.getElementById("userBox");
-const uploadBox = document.getElementById("uploadBox");
-const gallery = document.getElementById("gallery");
-const userEmailSpan = document.getElementById("userEmail");
+const firebaseConfig = {
+  apiKey: "AIzaSyDskXdRJfexDefGsNWedNQA2VWN8KUKJ9Q",
+  authDomain: "zdjecia-kokoszek2137.firebaseapp.com",
+  projectId: "zdjecia-kokoszek2137",
+  storageBucket: "zdjecia-kokoszek2137.appspot.com",
+  messagingSenderId: "936920168632",
+  appId: "1:936920168632:web:0469dce19d9d4a5ab25c4d"
+};
 
-let currentUser = null;
-let isIncognito = false;
-const ADMIN_EMAIL = "szkiarszys@gmail.com";
+firebase.initializeApp(firebaseConfig);
 
-// WIDOKI
-function showView(view) {
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+
+const ADMIN = "szkiarszys@gmail.com";
+let incognitoMode = false;
+
+function show(v){
   startBox.classList.add("hidden");
   registerBox.classList.add("hidden");
   loginBox.classList.add("hidden");
   userBox.classList.add("hidden");
   uploadBox.classList.add("hidden");
 
-  if(view === 'start') startBox.classList.remove("hidden");
-  if(view === 'register') registerBox.classList.remove("hidden");
-  if(view === 'login') loginBox.classList.remove("hidden");
-  if(view === 'user'){
-    userBox.classList.remove("hidden");
-    if(currentUser?.email === ADMIN_EMAIL) uploadBox.classList.remove("hidden");
-  }
+  if(v==="start") startBox.classList.remove("hidden");
+  if(v==="register") registerBox.classList.remove("hidden");
+  if(v==="login") loginBox.classList.remove("hidden");
 }
 
-// KONFIG FIREBASE
-const firebaseConfig = {
-  apiKey: "TU_WKLEJ_SWÓJ_API_KEY",
-  authDomain: "TU_WKLEJ_SWÓJ_AUTH_DOMAIN",
-  projectId: "TU_WKLEJ_SWÓJ_PROJECT_ID",
-  storageBucket: "TU_WKLEJ_SWÓJ_STORAGE_BUCKET",
-  messagingSenderId: "TU_WKLEJ_SWÓJ_SENDER_ID",
-  appId: "TU_WKLEJ_SWÓJ_APP_ID"
-};
-
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
-
-// REJESTRACJA
-async function register(){
-  const email = document.getElementById("regEmail").value;
-  const pass = document.getElementById("regPass").value;
-  if(!email || !pass) return alert("Wpisz email i hasło");
-  try{
-    const res = await auth.createUserWithEmailAndPassword(email,pass);
-    await res.user.sendEmailVerification();
-    alert("Sprawdź Gmail i kliknij link weryfikacyjny!");
-    showView('start');
-  }catch(e){
-    alert("Błąd rejestracji: "+e.message);
-  }
+function register(){
+  const e = regEmail.value;
+  const p = regPass.value;
+  auth.createUserWithEmailAndPassword(e,p)
+  .then(res=>{
+    res.user.sendEmailVerification();
+    alert("Sprawdź Gmail i kliknij link!");
+    show("start");
+  })
+  .catch(err=>alert(err.message));
 }
 
-// LOGOWANIE
-async function login(){
-  const email = document.getElementById("loginEmail").value;
-  const pass = document.getElementById("loginPass").value;
-  if(!email || !pass) return alert("Wpisz email i hasło");
-  try{
-    await auth.signInWithEmailAndPassword(email,pass);
-  }catch(e){
-    alert("Błąd logowania: "+e.message);
-  }
+function login(){
+  auth.signInWithEmailAndPassword(logEmail.value,logPass.value)
+  .catch(err=>alert(err.message));
 }
 
-// WYLOGUJ
-async function logout(){
-  await auth.signOut();
-  isIncognito = false;
-  showView('start');
+function logout(){
+  auth.signOut();
+  show("start");
 }
 
-// TRYB INCÓGNITO
 function incognito(){
-  isIncognito = true;
-  showView('user');
+  incognitoMode=true;
   loadGallery();
 }
 
-// OBSŁUGA STANU ZALOGOWANIA
 auth.onAuthStateChanged(user=>{
-  currentUser = user;
   if(user){
-    isIncognito = false;
-    userEmailSpan.textContent = user.email;
-    showView('user');
+    userBox.classList.remove("hidden");
+    userEmail.textContent=user.email;
+    if(user.email===ADMIN) uploadBox.classList.remove("hidden");
     loadGallery();
-  } else if(!isIncognito){
-    showView('start');
   }
 });
 
-// DODAWANIE ZDJĘĆ
-async function uploadPhoto(){
-  if(!currentUser || currentUser.email !== ADMIN_EMAIL) return;
-  const file = document.getElementById("photoFile").files[0];
-  if(!file) return alert("Wybierz plik!");
-  const name = document.getElementById("photoName").value || "Bez nazwy";
-  const desc = document.getElementById("photoDesc").value || "";
-
-  const r = storage.ref('photos/'+Date.now());
-  await r.put(file);
-  const url = await r.getDownloadURL();
-
-  await db.collection("photos").add({name, desc, url, ratings:[], comments:[]});
-  loadGallery();
-}
-
-// GALERIA
-async function loadGallery(){
-  gallery.innerHTML = "";
-  const snap = await db.collection("photos").get();
-  snap.forEach(docu=>{
-    const p = docu.data();
-    const avg = p.ratings.length ? (p.ratings.reduce((a,b)=>a+b)/p.ratings.length).toFixed(1) : "brak";
-    const div = document.createElement("div");
-    div.className="box";
-    div.innerHTML=`
-      <h3>${p.name}</h3>
-      <p>${p.desc}</p>
-      <img src="${p.url}">
-      ⭐ Średnia: ${avg}<br>
-      ${!isIncognito && currentUser ? `
-        Oceń:
-        <select onchange="rate('${docu.id}',this.value)">
-          <option></option>
-          <option>0</option><option>1</option><option>2</option>
-          <option>3</option><option>4</option><option>5</option>
-        </select><br>
-        <input placeholder="Komentarz" onkeydown="if(event.key==='Enter')comment('${docu.id}',this.value)">
-        <button onclick="loadGallery()">Cofnij</button>
-      ` : `<i>Tryb incognito – tylko podgląd</i>`}
-    `;
-    gallery.appendChild(div);
+function uploadPhoto(){
+  const file = photoFile.files[0];
+  if(!file) return alert("Wybierz plik");
+  const ref = storage.ref("photos/"+Date.now());
+  ref.put(file).then(()=>{
+    ref.getDownloadURL().then(url=>{
+      db.collection("photos").add({
+        name: photoName.value,
+        desc: photoDesc.value,
+        url:url,
+        ratings:[],
+        comments:[]
+      });
+      loadGallery();
+    });
   });
 }
 
-// OCENY
-async function rate(id,val){
-  if(!val) return;
-  const refd = db.collection("photos").doc(id);
-  const docSnap = await refd.get();
-  if(docSnap.exists){
-    const arr = [...(docSnap.data().ratings||[]), Number(val)];
-    await refd.update({ratings: arr});
-    loadGallery();
-  }
-}
-
-// KOMENTARZE
-async function comment(id,text){
-  if(!text) return;
-  const refd = db.collection("photos").doc(id);
-  const docSnap = await refd.get();
-  if(docSnap.exists){
-    const arr = [...(docSnap.data().comments||[]), text];
-    await refd.update({comments: arr});
-    loadGallery();
-  }
+function loadGallery(){
+  gallery.innerHTML="";
+  db.collection("photos").get().then(snap=>{
+    snap.forEach(d=>{
+      const p=d.data();
+      gallery.innerHTML+=`
+      <div class="box">
+        <h3>${p.name}</h3>
+        <p>${p.desc}</p>
+        <img src="${p.url}">
+      </div>`;
+    });
+  });
 }
 </script>
 
